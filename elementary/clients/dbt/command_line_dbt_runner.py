@@ -3,30 +3,30 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
+ 
 import yaml
-
+ 
 from elementary.clients.dbt.base_dbt_runner import BaseDbtRunner
 from elementary.clients.dbt.dbt_log import parse_dbt_output
 from elementary.exceptions.exceptions import DbtCommandError, DbtLsCommandError
 from elementary.monitor.dbt_project_utils import is_dbt_package_up_to_date
 from elementary.utils.env_vars import is_debug
 from elementary.utils.log import get_logger
-
+ 
 logger = get_logger(__name__)
-
+ 
 MACRO_RESULT_PATTERN = re.compile(
     "Elementary: --ELEMENTARY-MACRO-OUTPUT-START--(.*)--ELEMENTARY-MACRO-OUTPUT-END--"
 )
 RAW_EDR_LOGS_PATTERN = re.compile("Elementary: (.*)")
-
-
+ 
+ 
 @dataclass
 class DbtCommandResult:
     success: bool
     output: Optional[str]
-
-
+ 
+ 
 class CommandLineDbtRunner(BaseDbtRunner):
     def __init__(
         self,
@@ -55,7 +55,7 @@ class CommandLineDbtRunner(BaseDbtRunner):
             self.deps()
         elif run_deps_if_needed:
             self._run_deps_if_needed()
-
+ 
     def _inner_run_command(
         self,
         dbt_command_args: List[str],
@@ -65,12 +65,12 @@ class CommandLineDbtRunner(BaseDbtRunner):
         log_format: str,
     ) -> DbtCommandResult:
         raise NotImplementedError
-
+ 
     def _parse_ls_command_result(
         self, select: Optional[str], result: DbtCommandResult
     ) -> List[str]:
         raise NotImplementedError
-
+ 
     def _run_command(
         self,
         command_args: List[str],
@@ -91,7 +91,7 @@ class CommandLineDbtRunner(BaseDbtRunner):
             )
         if self.target:
             dbt_command_args.extend(["--target", self.target])
-
+ 
         all_vars = self._get_all_vars(vars)
         if all_vars:
             log_command_args = dbt_command_args.copy()
@@ -104,13 +104,13 @@ class CommandLineDbtRunner(BaseDbtRunner):
             dbt_command_args.extend(["--vars", json.dumps(all_vars)])
         else:
             log_command_args = dbt_command_args
-
+ 
         log_msg = f"Running dbt command {' '.join(log_command_args)}"
         if not quiet:
             logger.info(log_msg)
         else:
             logger.debug(log_msg)
-
+ 
         result = self._inner_run_command(
             dbt_command_args,
             capture_output=capture_output,
@@ -118,7 +118,7 @@ class CommandLineDbtRunner(BaseDbtRunner):
             log_output=log_output,
             log_format=log_format,
         )
-
+ 
         if capture_output and result.output:
             logger.debug(
                 f"Result bytes size for command '{log_command_args}' is {len(result.output)}"
@@ -126,15 +126,15 @@ class CommandLineDbtRunner(BaseDbtRunner):
             if log_output or is_debug():
                 for log in parse_dbt_output(result.output, log_format):
                     logger.info(log.msg)
-
+ 
         return result
-
+ 
     def deps(self, quiet: bool = False, capture_output: bool = True) -> bool:
         result = self._run_command(
             command_args=["deps"], quiet=quiet, capture_output=capture_output
         )
         return result.success
-
+ 
     def seed(self, select: Optional[str] = None, full_refresh: bool = False) -> bool:
         command_args = ["seed"]
         if full_refresh:
@@ -143,11 +143,11 @@ class CommandLineDbtRunner(BaseDbtRunner):
             command_args.extend(["-s", select])
         result = self._run_command(command_args)
         return result.success
-
+ 
     def snapshot(self) -> bool:
         result = self._run_command(["snapshot"])
         return result.success
-
+ 
     def run_operation(
         self,
         macro_name: str,
@@ -186,7 +186,7 @@ class CommandLineDbtRunner(BaseDbtRunner):
                 f'Failed to run macro: "{macro_name}"\nRun output: {result.output}'
             )
         run_operation_results = []
-
+ 
         log_pattern = (
             RAW_EDR_LOGS_PATTERN if return_raw_edr_logs else MACRO_RESULT_PATTERN
         )
@@ -195,14 +195,14 @@ class CommandLineDbtRunner(BaseDbtRunner):
                 if log_errors and log.level == "error":
                     logger.error(log.msg)
                     continue
-
+ 
                 if log.msg:
                     match = log_pattern.match(log.msg)
                     if match:
                         run_operation_results.append(match.group(1))
-
+ 
         return run_operation_results
-
+ 
     def run(
         self,
         models: Optional[str] = None,
@@ -229,7 +229,7 @@ class CommandLineDbtRunner(BaseDbtRunner):
             capture_output=capture_output,
         )
         return result.success
-
+ 
     def test(
         self,
         select: Optional[str] = None,
@@ -247,15 +247,15 @@ class CommandLineDbtRunner(BaseDbtRunner):
             capture_output=capture_output,
         )
         return result.success
-
+ 
     def debug(self, quiet: bool = False) -> bool:
         result = self._run_command(command_args=["debug"], quiet=quiet)
         return result.success
-
+ 
     def retry(self, quiet: bool = False) -> bool:
         result = self._run_command(command_args=["retry"], quiet=quiet)
         return result.success
-
+ 
     def ls(self, select: Optional[str] = None) -> list:
         command_args = ["-q", "ls"]
         if select:
@@ -267,15 +267,16 @@ class CommandLineDbtRunner(BaseDbtRunner):
             return self._parse_ls_command_result(select, result)
         except DbtCommandError:
             raise DbtLsCommandError(select)
-
+ 
     def source_freshness(self) -> bool:
         result = self._run_command(command_args=["source", "freshness"])
         return result.success
-
+ 
     def _get_installed_packages_names(self):
         packages_dir = os.path.join(
             self.project_dir, os.environ.get("DBT_PACKAGES_FOLDER", "dbt_packages")
         )
+        logger.info("Looking for installed packages in %s", packages_dir)
         try:
             return [
                 name
@@ -284,12 +285,13 @@ class CommandLineDbtRunner(BaseDbtRunner):
             ]
         except FileNotFoundError:
             return []
-
+ 
     def _get_required_packages_names(self):
         packages_yaml_path = os.path.join(self.project_dir, "packages.yml")
+        logger.info("Looking for required packages in %s", packages_yaml_path)
         if not os.path.exists(packages_yaml_path):
             return []
-
+ 
         with open(packages_yaml_path) as packages_yaml_file:
             packages_data = yaml.safe_load(packages_yaml_file)
         return [
@@ -297,15 +299,18 @@ class CommandLineDbtRunner(BaseDbtRunner):
             for package_entry in packages_data["packages"]
             if "package" in package_entry
         ]
-
+ 
     def _run_deps_if_needed(self):
         if not os.path.exists(self.project_dir):
             return
-
+ 
         should_run_deps = False
-
+ 
         installed_package_names = set(self._get_installed_packages_names())
+        logger.info("Installed packages: %s", installed_package_names)
         required_package_names = set(self._get_required_packages_names())
+        logger.info("Required packages: %s", required_package_names)
+ 
         if not required_package_names.issubset(installed_package_names):
             logger.info("Installing packages for edr internal dbt package...")
             should_run_deps = True
@@ -315,6 +320,6 @@ class CommandLineDbtRunner(BaseDbtRunner):
             #        as the dbt hub version (but for our package we do ensure they are aligned)
             logger.info("edr internal dbt package is not up-to-date, updating it...")
             should_run_deps = True
-
+ 
         if should_run_deps:
             self.deps()
