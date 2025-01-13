@@ -56,14 +56,14 @@ ArtifactSchemaType = TypeVar("ArtifactSchemaType", bound=ArtifactSchema)
 
 
 class SnapshotSchema(ArtifactSchema):
-    database_name: str
+    database_name: Optional[str] = None
     schema_name: str
     depends_on_macros: str
     depends_on_nodes: str
     path: str
     patch_path: Optional[str]
     generated_at: str
-    unique_key: str
+    unique_key: Optional[str]
     incremental_strategy: Optional[str]
     table_name: str
 
